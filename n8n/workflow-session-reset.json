@@ -1,0 +1,293 @@
+{
+  "name": "Session Reset — wave-complete (30min) ✅",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "sr000001-0000-4000-8000-000000000001",
+      "name": "Schedule (every 30 min)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (SELECT COUNT(*) FROM tickets WHERE workspace_id = 'ws-alpha' AND status IN ('open', 'running')) AS active_count,\n  (SELECT MAX(updated_at) FROM tickets WHERE workspace_id = 'ws-alpha' AND status IN ('done', 'review', 'failed', 'cancelled')) AS last_completed,\n  (SELECT MAX(created_at) FROM logs WHERE workspace_id = 'ws-alpha' AND component = 'system' AND message ILIKE '%session reset%') AS last_reset",
+        "options": {}
+      },
+      "id": "sr000002-0000-4000-8000-000000000002",
+      "name": "Check OO reset",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [220, 100],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-sr-oo-active",
+              "leftValue": "={{ Number($json.active_count) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "cond-sr-oo-wave",
+              "leftValue": "={{ $json.last_completed !== null && ($json.last_reset === null || new Date($json.last_completed) > new Date($json.last_reset)) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "sr000003-0000-4000-8000-000000000003",
+      "name": "OO needs reset?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.18.0.1:8188/admin/reset-session",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "sr000004-0000-4000-8000-000000000004",
+      "name": "Reset OO session",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 100],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (SELECT COUNT(*) FROM tickets WHERE workspace_id = 'ws-beta' AND status IN ('open', 'running')) AS active_count,\n  (SELECT MAX(updated_at) FROM tickets WHERE workspace_id = 'ws-beta' AND status IN ('done', 'review', 'failed', 'cancelled')) AS last_completed,\n  (SELECT MAX(created_at) FROM logs WHERE workspace_id = 'ws-beta' AND component = 'system' AND message ILIKE '%session reset%') AS last_reset",
+        "options": {}
+      },
+      "id": "sr000005-0000-4000-8000-000000000005",
+      "name": "Check OL reset",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [220, 300],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-sr-ol-active",
+              "leftValue": "={{ Number($json.active_count) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "cond-sr-ol-wave",
+              "leftValue": "={{ $json.last_completed !== null && ($json.last_reset === null || new Date($json.last_completed) > new Date($json.last_reset)) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "sr000006-0000-4000-8000-000000000006",
+      "name": "OL needs reset?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.18.0.1:8189/admin/reset-session",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "sr000007-0000-4000-8000-000000000007",
+      "name": "Reset OL session",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (SELECT COUNT(*) FROM tickets WHERE workspace_id = 'ws-gamma' AND status IN ('open', 'running')) AS active_count,\n  (SELECT MAX(updated_at) FROM tickets WHERE workspace_id = 'ws-gamma' AND status IN ('done', 'review', 'failed', 'cancelled')) AS last_completed,\n  (SELECT MAX(created_at) FROM logs WHERE workspace_id = 'ws-gamma' AND component = 'system' AND message ILIKE '%session reset%') AS last_reset",
+        "options": {}
+      },
+      "id": "sr000008-0000-4000-8000-000000000008",
+      "name": "Check FC reset",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [220, 500],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-sr-fc-active",
+              "leftValue": "={{ Number($json.active_count) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "cond-sr-fc-wave",
+              "leftValue": "={{ $json.last_completed !== null && ($json.last_reset === null || new Date($json.last_completed) > new Date($json.last_reset)) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "sr000009-0000-4000-8000-000000000009",
+      "name": "FC needs reset?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.18.0.1:8190/admin/reset-session",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "sr00000a-0000-4000-8000-0000000000a0",
+      "name": "Reset FC session",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 500],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Schedule (every 30 min)": {
+      "main": [
+        [
+          {"node": "Check OO reset", "type": "main", "index": 0},
+          {"node": "Check OL reset", "type": "main", "index": 0},
+          {"node": "Check FC reset", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Check OO reset": {
+      "main": [[{"node": "OO needs reset?", "type": "main", "index": 0}]]
+    },
+    "OO needs reset?": {
+      "main": [
+        [{"node": "Reset OO session", "type": "main", "index": 0}],
+        []
+      ]
+    },
+    "Check OL reset": {
+      "main": [[{"node": "OL needs reset?", "type": "main", "index": 0}]]
+    },
+    "OL needs reset?": {
+      "main": [
+        [{"node": "Reset OL session", "type": "main", "index": 0}],
+        []
+      ]
+    },
+    "Check FC reset": {
+      "main": [[{"node": "FC needs reset?", "type": "main", "index": 0}]]
+    },
+    "FC needs reset?": {
+      "main": [
+        [{"node": "Reset FC session", "type": "main", "index": 0}],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "sr000001-v1-0000-0000-000000000001"
+}

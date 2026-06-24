@@ -1,0 +1,128 @@
+model_list:
+  # ── Orchestration models ──────────────────────────────────────────────────
+  - model_name: orchestrator-primary
+    litellm_params:
+      model: ollama_chat/llama3.1:8b
+      api_base: http://localhost:11434
+      timeout: 60
+      extra_body:
+        options:
+          num_ctx: 32768
+    model_info:
+      context_window: 32768
+
+  - model_name: orchestrator-sonnet
+    litellm_params:
+      model: claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY_SONNET
+      cache_control_injection_points:
+        - location: message
+          role: system
+
+  - model_name: orchestrator-fallback
+    litellm_params:
+      model: ollama_chat/qwen3.6:27b
+      api_base: http://localhost:11434
+      timeout: 60
+
+  - model_name: orchestrator-local
+    litellm_params:
+      model: ollama_chat/llama3.1:8b
+      api_base: http://localhost:11434
+      timeout: 60
+      extra_body:
+        options:
+          num_ctx: 32768
+    model_info:
+      context_window: 32768
+
+  # ── Heartbeat models ──────────────────────────────────────────────────────
+  - model_name: heartbeat-cheap
+    litellm_params:
+      model: claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_API_KEY_HAIKU
+      cache_control_injection_points:
+        - location: message
+          role: system
+  - model_name: heartbeat-local
+    litellm_params:
+      model: ollama_chat/qwen3.6:27b
+      api_base: http://localhost:11434
+
+  # ── Named cloud models ────────────────────────────────────────────────────
+  - model_name: sonnet
+    litellm_params:
+      model: claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY_SONNET
+      cache_control_injection_points:
+        - location: message
+          role: system
+
+  - model_name: opus
+    litellm_params:
+      model: claude-opus-4-8
+      api_key: os.environ/ANTHROPIC_API_KEY_OPUS
+      cache_control_injection_points:
+        - location: message
+          role: system
+
+  - model_name: haiku
+    litellm_params:
+      model: claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_API_KEY_HAIKU
+      cache_control_injection_points:
+        - location: message
+          role: system
+
+  # ── Embedding model ───────────────────────────────────────────────────────
+  - model_name: bge-m3
+    litellm_params:
+      model: ollama/bge-m3
+      api_base: http://localhost:11434
+
+  # ── Coder aliases (escalation ladder) ────────────────────────────────────
+  - model_name: local-coder
+    litellm_params:
+      model: ollama_chat/qwen3.6:27b
+      api_base: http://localhost:11434
+
+  - model_name: sonnet-coder
+    litellm_params:
+      model: claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY_SONNET
+
+  - model_name: opus-coder
+    litellm_params:
+      model: claude-opus-4-8
+      api_key: os.environ/ANTHROPIC_API_KEY_OPUS
+
+  - model_name: qwen-local
+    litellm_params:
+      model: ollama_chat/qwen3.6:27b
+      api_base: http://localhost:11434
+
+  # ── Per-workspace product model lanes ────────────────────────────────────
+  # Each workspace gets its own model alias so per-product spend is isolated
+  # in Langfuse from orchestrator/build spend.
+  # Add one block per workspace, with a dedicated API key per product:
+  #
+  # - model_name: ws-alpha-chat
+  #   litellm_params:
+  #     model: claude-haiku-4-5-20251001
+  #     api_key: os.environ/WORKSPACE_ALPHA_HAIKU_KEY
+  #
+  # - model_name: ws-beta-chat
+  #   litellm_params:
+  #     model: claude-haiku-4-5-20251001
+  #     api_key: os.environ/WORKSPACE_BETA_HAIKU_KEY
+
+litellm_settings:
+  drop_params: false
+  success_callback: ["langfuse"]
+  failure_callback: ["langfuse"]
+  cache: false
+  set_verbose: false
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/LITELLM_DATABASE_URL

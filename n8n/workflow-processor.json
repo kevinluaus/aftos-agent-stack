@@ -1,0 +1,1095 @@
+{
+  "name": "Processor — EXECUTE NEXT (5min, dep-aware) ✅",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "name": "Schedule (every 5 min)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE tickets SET status = CASE WHEN attempts >= 6 THEN 'failed' ELSE 'open' END, last_error = left(COALESCE(last_error, '') || ' | reaped: stuck-running >5min (dead) or failed with retries left', 500), updated_at = now() WHERE (status = 'running' AND updated_at < now() - interval '5 minutes') OR (status = 'failed' AND attempts < 6);",
+        "options": {}
+      },
+      "id": "a1b2c3d4-000a-000a-000a-00000000000a",
+      "name": "Reaper (requeue stuck running)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [110, 500],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (SELECT COUNT(*) FROM tickets WHERE status = 'running') AS global_running,\n  (SELECT COUNT(*) FROM tickets t WHERE t.workspace_id = 'ws-alpha' AND t.status = 'open' AND t.attempts < 6 AND NOT EXISTS (SELECT 1 FROM unnest(t.dependencies) dep JOIN tickets dt ON dt.id = dep WHERE dt.status <> 'done')) AS open_count",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0002-0002-0002-000000000002",
+      "name": "Check OO ready",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [220, 300],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-oo-global",
+              "leftValue": "={{ Number($json.global_running) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "cond-oo-open",
+              "leftValue": "={{ Number($json.open_count) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "a1b2c3d4-0003-0003-0003-000000000003",
+      "name": "OO ready? (idle + has open work)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://172.18.0.1:8088/mcp",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "aa000001-aa00-aa00-aa00-000000000001",
+      "name": "MCP Probe (ws-alpha)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [550, 440],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) AS count FROM logs WHERE component = 'push_failure' AND workspace_id = 'ws-alpha' AND created_at > now() - interval '30 minutes'",
+        "options": {}
+      },
+      "id": "aa000002-aa00-aa00-aa00-000000000002",
+      "name": "Push Gate (ws-alpha)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [550, 580],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-oo-mcp",
+              "leftValue": "={{ !$node[\"MCP Probe (ws-alpha)\"].json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "cond-oo-push",
+              "leftValue": "={{ Number($json.count) }}",
+              "rightValue": 2,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "aa000003-aa00-aa00-aa00-000000000003",
+      "name": "Health Gate (ws-alpha)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [720, 510]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8099/execute/ws-alpha",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0004-0004-0004-000000000004",
+      "name": "EXECUTE NEXT → ws-alpha",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 160]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) AS count FROM logs WHERE component = 'n8n_gate_alert' AND workspace_id = 'ws-alpha' AND created_at > now() - interval '60 minutes'",
+        "options": {}
+      },
+      "id": "aa000004-aa00-aa00-aa00-000000000004",
+      "name": "Alert Dedup (ws-alpha)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [900, 580],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-oo-dedup",
+              "leftValue": "={{ Number($json.count) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "aa000005-aa00-aa00-aa00-000000000005",
+      "name": "Alert Dedup? (ws-alpha)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1080, 580]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "🚨 Health gate BLOCKED ws-alpha\n\nEXECUTE NEXT was NOT dispatched this cycle.\nReason: MCP probe failed OR push_failure count ≥ 2 in last 30 min.\n\nCheck MCP: curl http://172.18.0.1:8088/mcp\nCheck logs: SELECT * FROM logs WHERE component='push_failure' AND workspace_id='ws-alpha' AND created_at > now() - interval '30 minutes' ORDER BY created_at DESC;",
+        "additionalFields": {}
+      },
+      "id": "aa000006-aa00-aa00-aa00-000000000006",
+      "name": "Ops Alert (ws-alpha)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1260, 500],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "aftos-ops-bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO logs (workspace_id, component, level, message) VALUES ('ws-alpha', 'n8n_gate_alert', 'warn', 'health gate blocked EXECUTE NEXT for ws-alpha: MCP probe failed or push_failure threshold exceeded')",
+        "options": {}
+      },
+      "id": "aa000007-aa00-aa00-aa00-000000000007",
+      "name": "Log Alert (ws-alpha)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1260, 660],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (SELECT COUNT(*) FROM tickets WHERE status = 'running') AS global_running,\n  (SELECT COUNT(*) FROM tickets t WHERE t.workspace_id = 'ws-beta' AND t.status = 'open' AND t.attempts < 6 AND NOT EXISTS (SELECT 1 FROM unnest(t.dependencies) dep JOIN tickets dt ON dt.id = dep WHERE dt.status <> 'done')) AS open_count",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0006-0006-0006-000000000006",
+      "name": "Check OL ready",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1100, 300],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-ol-global",
+              "leftValue": "={{ Number($json.global_running) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "cond-ol-open",
+              "leftValue": "={{ Number($json.open_count) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "a1b2c3d4-0007-0007-0007-000000000007",
+      "name": "OL ready? (idle + has open work)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1320, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://172.18.0.1:8089/mcp",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "bb000001-bb00-bb00-bb00-000000000001",
+      "name": "MCP Probe (ws-beta)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1430, 440],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) AS count FROM logs WHERE component = 'push_failure' AND workspace_id = 'ws-beta' AND created_at > now() - interval '30 minutes'",
+        "options": {}
+      },
+      "id": "bb000002-bb00-bb00-bb00-000000000002",
+      "name": "Push Gate (ws-beta)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1430, 580],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-ol-mcp",
+              "leftValue": "={{ !$node[\"MCP Probe (ws-beta)\"].json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "cond-ol-push",
+              "leftValue": "={{ Number($json.count) }}",
+              "rightValue": 2,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "bb000003-bb00-bb00-bb00-000000000003",
+      "name": "Health Gate (ws-beta)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1600, 510]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8099/execute/ws-beta",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0008-0008-0008-000000000008",
+      "name": "EXECUTE NEXT → ws-beta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 160]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) AS count FROM logs WHERE component = 'n8n_gate_alert' AND workspace_id = 'ws-beta' AND created_at > now() - interval '60 minutes'",
+        "options": {}
+      },
+      "id": "bb000004-bb00-bb00-bb00-000000000004",
+      "name": "Alert Dedup (ws-beta)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1780, 580],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-ol-dedup",
+              "leftValue": "={{ Number($json.count) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "bb000005-bb00-bb00-bb00-000000000005",
+      "name": "Alert Dedup? (ws-beta)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1960, 580]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "🚨 Health gate BLOCKED ws-beta\n\nEXECUTE NEXT was NOT dispatched this cycle.\nReason: MCP probe failed OR push_failure count ≥ 2 in last 30 min.\n\nCheck MCP: curl http://172.18.0.1:8089/mcp\nCheck logs: SELECT * FROM logs WHERE component='push_failure' AND workspace_id='ws-beta' AND created_at > now() - interval '30 minutes' ORDER BY created_at DESC;",
+        "additionalFields": {}
+      },
+      "id": "bb000006-bb00-bb00-bb00-000000000006",
+      "name": "Ops Alert (ws-beta)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2140, 500],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "aftos-ops-bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO logs (workspace_id, component, level, message) VALUES ('ws-beta', 'n8n_gate_alert', 'warn', 'health gate blocked EXECUTE NEXT for ws-beta: MCP probe failed or push_failure threshold exceeded')",
+        "options": {}
+      },
+      "id": "bb000007-bb00-bb00-bb00-000000000007",
+      "name": "Log Alert (ws-beta)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2140, 660],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (SELECT COUNT(*) FROM tickets WHERE status = 'running') AS global_running,\n  (SELECT COUNT(*) FROM tickets t WHERE t.workspace_id = 'ws-gamma' AND t.status = 'open' AND t.attempts < 6 AND NOT EXISTS (SELECT 1 FROM unnest(t.dependencies) dep JOIN tickets dt ON dt.id = dep WHERE dt.status <> 'done')) AS open_count",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0010-0010-0010-000000000010",
+      "name": "Check FC ready",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1980, 300],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-fc-global",
+              "leftValue": "={{ Number($json.global_running) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "cond-fc-open",
+              "leftValue": "={{ Number($json.open_count) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "a1b2c3d4-0011-0011-0011-000000000011",
+      "name": "FC ready? (idle + has open work)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2200, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://172.18.0.1:8090/mcp",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "cc000001-cc00-cc00-cc00-000000000001",
+      "name": "MCP Probe (ws-gamma)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2310, 440],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) AS count FROM logs WHERE component = 'push_failure' AND workspace_id = 'ws-gamma' AND created_at > now() - interval '30 minutes'",
+        "options": {}
+      },
+      "id": "cc000002-cc00-cc00-cc00-000000000002",
+      "name": "Push Gate (ws-gamma)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2310, 580],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-fc-mcp",
+              "leftValue": "={{ !$node[\"MCP Probe (ws-gamma)\"].json.error }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "cond-fc-push",
+              "leftValue": "={{ Number($json.count) }}",
+              "rightValue": 2,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "cc000003-cc00-cc00-cc00-000000000003",
+      "name": "Health Gate (ws-gamma)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2480, 510]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8099/execute/ws-gamma",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0012-0012-0012-000000000012",
+      "name": "EXECUTE NEXT → ws-gamma",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2420, 160]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) AS count FROM logs WHERE component = 'n8n_gate_alert' AND workspace_id = 'ws-gamma' AND created_at > now() - interval '60 minutes'",
+        "options": {}
+      },
+      "id": "cc000004-cc00-cc00-cc00-000000000004",
+      "name": "Alert Dedup (ws-gamma)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2660, 580],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-fc-dedup",
+              "leftValue": "={{ Number($json.count) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "cc000005-cc00-cc00-cc00-000000000005",
+      "name": "Alert Dedup? (ws-gamma)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2840, 580]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "🚨 Health gate BLOCKED ws-gamma\n\nEXECUTE NEXT was NOT dispatched this cycle.\nReason: MCP probe failed OR push_failure count ≥ 2 in last 30 min.\n\nCheck MCP: curl http://172.18.0.1:8090/mcp\nCheck logs: SELECT * FROM logs WHERE component='push_failure' AND workspace_id='ws-gamma' AND created_at > now() - interval '30 minutes' ORDER BY created_at DESC;",
+        "additionalFields": {}
+      },
+      "id": "cc000006-cc00-cc00-cc00-000000000006",
+      "name": "Ops Alert (ws-gamma)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [3020, 500],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "aftos-ops-bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO logs (workspace_id, component, level, message) VALUES ('ws-gamma', 'n8n_gate_alert', 'warn', 'health gate blocked EXECUTE NEXT for ws-gamma: MCP probe failed or push_failure threshold exceeded')",
+        "options": {}
+      },
+      "id": "cc000007-cc00-cc00-cc00-000000000007",
+      "name": "Log Alert (ws-gamma)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [3020, 660],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule (every 5 min)": {
+      "main": [
+        [
+          {
+            "node": "Reaper (requeue stuck running)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reaper (requeue stuck running)": {
+      "main": [
+        [
+          {
+            "node": "Check OO ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check OO ready": {
+      "main": [
+        [
+          {
+            "node": "OO ready? (idle + has open work)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OO ready? (idle + has open work)": {
+      "main": [
+        [
+          {
+            "node": "MCP Probe (ws-alpha)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check OL ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP Probe (ws-alpha)": {
+      "main": [
+        [
+          {
+            "node": "Push Gate (ws-alpha)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push Gate (ws-alpha)": {
+      "main": [
+        [
+          {
+            "node": "Health Gate (ws-alpha)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health Gate (ws-alpha)": {
+      "main": [
+        [
+          {
+            "node": "EXECUTE NEXT → ws-alpha",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Dedup (ws-alpha)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EXECUTE NEXT → ws-alpha": {
+      "main": [[]]
+    },
+    "Alert Dedup (ws-alpha)": {
+      "main": [
+        [
+          {
+            "node": "Alert Dedup? (ws-alpha)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Dedup? (ws-alpha)": {
+      "main": [
+        [
+          {
+            "node": "Ops Alert (ws-alpha)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check OL ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ops Alert (ws-alpha)": {
+      "main": [
+        [
+          {
+            "node": "Log Alert (ws-alpha)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Alert (ws-alpha)": {
+      "main": [
+        [
+          {
+            "node": "Check OL ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check OL ready": {
+      "main": [
+        [
+          {
+            "node": "OL ready? (idle + has open work)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OL ready? (idle + has open work)": {
+      "main": [
+        [
+          {
+            "node": "MCP Probe (ws-beta)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check FC ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP Probe (ws-beta)": {
+      "main": [
+        [
+          {
+            "node": "Push Gate (ws-beta)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push Gate (ws-beta)": {
+      "main": [
+        [
+          {
+            "node": "Health Gate (ws-beta)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health Gate (ws-beta)": {
+      "main": [
+        [
+          {
+            "node": "EXECUTE NEXT → ws-beta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Dedup (ws-beta)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EXECUTE NEXT → ws-beta": {
+      "main": [[]]
+    },
+    "Alert Dedup (ws-beta)": {
+      "main": [
+        [
+          {
+            "node": "Alert Dedup? (ws-beta)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Dedup? (ws-beta)": {
+      "main": [
+        [
+          {
+            "node": "Ops Alert (ws-beta)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check FC ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ops Alert (ws-beta)": {
+      "main": [
+        [
+          {
+            "node": "Log Alert (ws-beta)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Alert (ws-beta)": {
+      "main": [
+        [
+          {
+            "node": "Check FC ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check FC ready": {
+      "main": [
+        [
+          {
+            "node": "FC ready? (idle + has open work)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FC ready? (idle + has open work)": {
+      "main": [
+        [
+          {
+            "node": "MCP Probe (ws-gamma)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "MCP Probe (ws-gamma)": {
+      "main": [
+        [
+          {
+            "node": "Push Gate (ws-gamma)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push Gate (ws-gamma)": {
+      "main": [
+        [
+          {
+            "node": "Health Gate (ws-gamma)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health Gate (ws-gamma)": {
+      "main": [
+        [
+          {
+            "node": "EXECUTE NEXT → ws-gamma",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Dedup (ws-gamma)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Dedup (ws-gamma)": {
+      "main": [
+        [
+          {
+            "node": "Alert Dedup? (ws-gamma)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Dedup? (ws-gamma)": {
+      "main": [
+        [
+          {
+            "node": "Ops Alert (ws-gamma)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Ops Alert (ws-gamma)": {
+      "main": [
+        [
+          {
+            "node": "Log Alert (ws-gamma)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "agentstack-error-handler-v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": {
+    "instanceId": ""
+  },
+  "id": "xCzjPKOODPfGlVFE",
+  "active": false
+}

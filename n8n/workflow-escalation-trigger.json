@@ -1,0 +1,559 @@
+{
+  "name": "Escalation Trigger \u2014 /approve /disapprove /requeue",
+  "nodes": [
+    {
+      "id": "etrig2-0001-0001-0001-0001-000000000001",
+      "name": "Schedule (every 60s)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 60
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "etrig2-0002-0002-0002-0002-000000000002",
+      "name": "Get Last Offset",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COALESCE((SELECT value FROM telegram_poll_state WHERE key='last_update_id'), 0) AS last_update_id, (SELECT value FROM n8n_config WHERE key='ops_bot_base_url') AS bot_base_url",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "id": "etrig2-0003-0003-0003-0003-000000000003",
+      "name": "Fetch Updates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Get Last Offset').item.json.bot_base_url }}getUpdates",
+        "authentication": "none",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "offset",
+              "value": "={{ Number($json.last_update_id) + 1 }}"
+            },
+            {
+              "name": "limit",
+              "value": "=100"
+            },
+            {
+              "name": "timeout",
+              "value": "=0"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      }
+    },
+    {
+      "id": "etrig2-0004-0004-0004-0004-000000000004",
+      "name": "Parse Commands",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nif (!items || items.length === 0) return [];\n\nconst resp = items[0].json;\nif (resp.error || !resp.ok || !Array.isArray(resp.result)) return [];\nif (resp.result.length === 0) return [];\n\nconst MAX_UPDATE_ID = Math.max(...resp.result.map(u => u.update_id));\nconst AUTH_CHAT_ID = 'YOUR_TELEGRAM_CHAT_ID';\n\nconst commands = resp.result\n  .filter(u =>\n    u.message &&\n    String(u.message.chat && u.message.chat.id) === AUTH_CHAT_ID &&\n    typeof u.message.text === 'string' &&\n    u.message.text.trim().startsWith('/')\n  )\n  .map(u => {\n    const parts = u.message.text.trim().split(/\\s+/);\n    return {\n      json: {\n        is_command: true,\n        max_update_id: MAX_UPDATE_ID,\n        update_id: u.update_id,\n        command: (parts[0] || '').toLowerCase(),\n        ticketId: parseInt(parts[1]) || 0,\n        chatId: String(u.message.chat.id),\n        text: u.message.text\n      }\n    };\n  });\n\nif (commands.length === 0) {\n  // Updates seen but no commands from authorized chat \u2014 must still advance offset.\n  return [{ json: { is_command: false, max_update_id: MAX_UPDATE_ID, command: null, ticketId: 0, chatId: AUTH_CHAT_ID } }];\n}\n\nreturn commands;"
+      }
+    },
+    {
+      "id": "etrig2-0005-0005-0005-0005-000000000005",
+      "name": "Update Offset",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE telegram_poll_state SET value = GREATEST(value, {{ $json.max_update_id }}::bigint), updated_at = now() WHERE key = 'last_update_id'",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "id": "etrig2-0006-0006-0006-0006-000000000006",
+      "name": "Has Command?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-has-command",
+              "leftValue": "={{ $json.is_command }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "etrig2-0007-0007-0007-0007-000000000007",
+      "name": "Is /approve?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-is-approve",
+              "leftValue": "={{ $json.command }}",
+              "rightValue": "/approve",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "etrig2-0008-0008-0008-0008-000000000008",
+      "name": "Approve: set open",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1540,
+        180
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH approve AS (UPDATE tickets SET status='open', updated_at=now() WHERE id={{ $json.ticketId }} AND status='escalation_pending' RETURNING workspace_id) INSERT INTO logs (workspace_id, component, level, message, ticket_id) SELECT workspace_id, 'escalation_approved', 'info', 'escalation approved via Telegram /approve', {{ $json.ticketId }} FROM approve",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "id": "etrig2-0009-0009-0009-0009-000000000009",
+      "name": "Confirm: approved",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1760,
+        180
+      ],
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "=\u2705 Ticket #{{ $json.ticketId }} approved for Sonnet escalation. It will be claimed on the next processor cycle.",
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "aftos-ops-bot"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "etrig2-0010-0010-0010-0010-000000000010",
+      "name": "Is /disapprove?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        360
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-is-disapprove",
+              "leftValue": "={{ $json.command }}",
+              "rightValue": "/disapprove",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "etrig2-0011-0011-0011-0011-000000000011",
+      "name": "Disapprove: set failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1760,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE tickets SET status='failed', last_error='escalation disapproved \u2014 re-scope this ticket for Qwen or raise model_hint manually', updated_at=now() WHERE id={{ $json.ticketId }} AND status='escalation_pending'",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "id": "etrig2-0012-0012-0012-0012-000000000012",
+      "name": "Confirm: disapproved",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1980,
+        300
+      ],
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "=\u274c Ticket #{{ $json.ticketId }} marked failed. Re-scope for Qwen, or /requeue {{ $json.ticketId }} after editing the spec.",
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "aftos-ops-bot"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "etrig2-0013-0013-0013-0013-000000000013",
+      "name": "Is /requeue?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        480
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-is-requeue",
+              "leftValue": "={{ $json.command }}",
+              "rightValue": "/requeue",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "etrig2-0014-0014-0014-0014-000000000014",
+      "name": "Requeue: reset to Qwen",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1980,
+        420
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH reset AS (UPDATE tickets SET status='open', attempts=0, updated_at=now() WHERE id={{ $json.ticketId }} AND status='escalation_pending') DELETE FROM logs WHERE component='escalation_pending' AND ticket_id={{ $json.ticketId }}",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "id": "etrig2-0015-0015-0015-0015-000000000015",
+      "name": "Confirm: requeued",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2200,
+        420
+      ],
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "=\ud83d\udd04 Ticket #{{ $json.ticketId }} returned to Qwen queue (attempts=0, reviewer feedback preserved). Escalation gate re-armed \u2014 it will fire again at attempts=3.",
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "aftos-ops-bot"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "etrig2-0016-0016-0016-0016-000000000016",
+      "name": "Unknown command",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1980,
+        600
+      ],
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "=Unknown command: {{ $json.command }}\n\nValid commands:\n  /approve <ticket_id>\n  /disapprove <ticket_id>\n  /requeue <ticket_id>",
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "aftos-ops-bot"
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Schedule (every 60s)": {
+      "main": [
+        [
+          {
+            "node": "Get Last Offset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Last Offset": {
+      "main": [
+        [
+          {
+            "node": "Fetch Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Updates": {
+      "main": [
+        [
+          {
+            "node": "Parse Commands",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Commands": {
+      "main": [
+        [
+          {
+            "node": "Update Offset",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Has Command?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Offset": {
+      "main": [
+        []
+      ]
+    },
+    "Has Command?": {
+      "main": [
+        [
+          {
+            "node": "Is /approve?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Is /approve?": {
+      "main": [
+        [
+          {
+            "node": "Approve: set open",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is /disapprove?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approve: set open": {
+      "main": [
+        [
+          {
+            "node": "Confirm: approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is /disapprove?": {
+      "main": [
+        [
+          {
+            "node": "Disapprove: set failed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is /requeue?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Disapprove: set failed": {
+      "main": [
+        [
+          {
+            "node": "Confirm: disapproved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is /requeue?": {
+      "main": [
+        [
+          {
+            "node": "Requeue: reset to Qwen",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requeue: reset to Qwen": {
+      "main": [
+        [
+          {
+            "node": "Confirm: requeued",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "errorWorkflow": "agentstack-error-handler-v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": {
+    "instanceId": ""
+  },
+  "id": "agentstack-escalation-trigger-v1",
+  "active": false
+}

@@ -1,0 +1,553 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_AGENTSTACK",
+      "label": "agentstack",
+      "description": "agentstack PostgreSQL datasource",
+      "type": "datasource",
+      "pluginId": "grafana-postgresql-datasource",
+      "pluginName": "PostgreSQL"
+    }
+  ],
+  "__requires": [
+    {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "9.0.0"},
+    {"type": "datasource", "id": "grafana-postgresql-datasource", "name": "PostgreSQL", "version": "1.0.0"}
+  ],
+  "title": "Workspace Overview",
+  "uid": "workspace-overview-9",
+  "tags": ["stage9", "overview", "tickets", "mcp"],
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": {"from": "now-24h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+        "definition": "SELECT id FROM workspaces ORDER BY id",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Workspace",
+        "multi": true,
+        "name": "workspace",
+        "options": [],
+        "query": "SELECT id FROM workspaces ORDER BY id",
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": ["open", "running", "escalation_pending", "review", "done"],
+          "value": ["open", "running", "escalation_pending", "review", "done"]
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Status",
+        "multi": true,
+        "name": "status",
+        "options": [
+          {"selected": false, "text": "All",                 "value": "$__all"},
+          {"selected": true,  "text": "open",                "value": "open"},
+          {"selected": true,  "text": "running",             "value": "running"},
+          {"selected": false, "text": "blocked",             "value": "blocked"},
+          {"selected": true,  "text": "escalation_pending",  "value": "escalation_pending"},
+          {"selected": true,  "text": "review",              "value": "review"},
+          {"selected": true,  "text": "done",                "value": "done"},
+          {"selected": false, "text": "failed",              "value": "failed"},
+          {"selected": false, "text": "cancelled",           "value": "cancelled"}
+        ],
+        "query": "open,running,blocked,escalation_pending,review,done,failed,cancelled",
+        "type": "custom"
+      }
+    ]
+  },
+  "panels": [
+
+    {
+      "id": 1,
+      "title": "Ticket Status",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "panels": []
+    },
+
+    {
+      "id": 2,
+      "title": "Status by workspace",
+      "description": "Live snapshot per workspace. Esc. Pending = agent is waiting for human approval to escalate to a cloud-tier model.",
+      "type": "table",
+      "gridPos": {"h": 10, "w": 16, "x": 0, "y": 1},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {
+        "sortBy": [{"displayName": "Workspace", "desc": false}],
+        "footer": {"show": false}
+      },
+      "fieldConfig": {
+        "defaults": {"custom": {"align": "center", "minWidth": 80}},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Workspace"},
+            "properties": [
+              {"id": "custom.align",    "value": "left"},
+              {"id": "custom.width",    "value": 160},
+              {"id": "custom.minWidth", "value": 120}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Open"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "custom.width", "value": 75},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}},
+              {"id": "color", "value": {"mode": "thresholds"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Running"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "custom.width", "value": 80},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 4}]}},
+              {"id": "color", "value": {"mode": "thresholds"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Esc. Pending"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "custom.width", "value": 100},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "dark-orange", "value": 1}]}},
+              {"id": "color", "value": {"mode": "thresholds"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Review"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "custom.width", "value": 75},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}]}},
+              {"id": "color", "value": {"mode": "thresholds"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Blocked"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "custom.width", "value": 80},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 1}]}},
+              {"id": "color", "value": {"mode": "thresholds"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Done"},
+            "properties": [{"id": "custom.width", "value": 75}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Escalated"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "custom.width", "value": 85},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 1}]}},
+              {"id": "color", "value": {"mode": "thresholds"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Cost $"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "custom.width", "value": 90},
+              {"id": "unit",     "value": "currencyUSD"},
+              {"id": "decimals", "value": 4},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.5}, {"color": "red", "value": 5}]}},
+              {"id": "color", "value": {"mode": "thresholds"}}
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+          "rawSql": "SELECT\n  t.workspace_id                                                               AS \"Workspace\",\n  COUNT(*) FILTER (WHERE t.status = 'open')                AS \"Open\",\n  COUNT(*) FILTER (WHERE t.status = 'running')             AS \"Running\",\n  COUNT(*) FILTER (WHERE t.status = 'escalation_pending')  AS \"Esc. Pending\",\n  COUNT(*) FILTER (WHERE t.status = 'review')              AS \"Review\",\n  COUNT(*) FILTER (WHERE t.status = 'blocked')             AS \"Blocked\",\n  COUNT(*) FILTER (WHERE t.status = 'done')                AS \"Done\",\n  COUNT(DISTINCT CASE WHEN cc.escalated THEN t.id END)     AS \"Escalated\",\n  ROUND(COALESCE(SUM(cc.ticket_cost), 0)::numeric, 4)     AS \"Cost $\"\nFROM tickets t\nLEFT JOIN (\n  SELECT ticket_id,\n    SUM(cost_usd)                                                  AS ticket_cost,\n    BOOL_OR(router_decision IN ('sonnet-coder','opus-coder'))       AS escalated\n  FROM coder_calls WHERE ticket_id IS NOT NULL GROUP BY ticket_id\n) cc ON cc.ticket_id = t.id\nGROUP BY t.workspace_id\nORDER BY t.workspace_id",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+
+    {
+      "id": 3,
+      "title": "Stuck  (running > 60 min)",
+      "description": "Should be 0. Alert 4 fires on this.",
+      "type": "stat",
+      "gridPos": {"h": 2, "w": 8, "x": 16, "y": 1},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "justifyMode": "center"},
+      "fieldConfig": {"defaults": {
+        "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]},
+        "color": {"mode": "thresholds"}
+      }},
+      "targets": [{"datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"}, "rawSql": "SELECT COUNT(*) AS \"Stuck\" FROM tickets WHERE status='running' AND started_at < now()-interval '60 minutes'", "format": "table", "refId": "A"}]
+    },
+
+    {
+      "id": 4,
+      "title": "Running now",
+      "type": "stat",
+      "gridPos": {"h": 2, "w": 8, "x": 16, "y": 3},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "justifyMode": "center"},
+      "fieldConfig": {"defaults": {
+        "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 5}]},
+        "color": {"mode": "thresholds"}
+      }},
+      "targets": [{"datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"}, "rawSql": "SELECT COUNT(*) AS \"Running\" FROM tickets WHERE status='running'", "format": "table", "refId": "A"}]
+    },
+
+    {
+      "id": 21,
+      "title": "Escalation pending",
+      "description": "Tickets paused at escalation_pending — agent needs human approval to use a cloud-tier model. Requires action.",
+      "type": "stat",
+      "gridPos": {"h": 2, "w": 8, "x": 16, "y": 5},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "justifyMode": "center"},
+      "fieldConfig": {"defaults": {
+        "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "dark-orange", "value": 1}]},
+        "color": {"mode": "thresholds"}
+      }},
+      "targets": [{"datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"}, "rawSql": "SELECT COUNT(*) AS \"Esc. Pending\" FROM tickets WHERE status='escalation_pending'", "format": "table", "refId": "A"}]
+    },
+
+    {
+      "id": 5,
+      "title": "PRs awaiting review",
+      "description": "Tickets in 'review' — PR open, awaiting /review-pending.",
+      "type": "stat",
+      "gridPos": {"h": 2, "w": 8, "x": 16, "y": 7},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "justifyMode": "center"},
+      "fieldConfig": {"defaults": {
+        "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}]},
+        "color": {"mode": "thresholds"}
+      }},
+      "targets": [{"datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"}, "rawSql": "SELECT COUNT(*) AS \"In Review\" FROM tickets WHERE status='review'", "format": "table", "refId": "A"}]
+    },
+
+    {
+      "id": 20,
+      "title": "Escalated today",
+      "description": "Distinct tickets where coder routed to Sonnet or Opus in the last 24h.",
+      "type": "stat",
+      "gridPos": {"h": 2, "w": 8, "x": 16, "y": 9},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "justifyMode": "center"},
+      "fieldConfig": {"defaults": {
+        "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 1}, {"color": "red", "value": 5}]},
+        "color": {"mode": "thresholds"}
+      }},
+      "targets": [{"datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"}, "rawSql": "SELECT COUNT(DISTINCT ticket_id) AS \"Escalated today\"\nFROM coder_calls\nWHERE router_decision IN ('sonnet-coder','opus-coder')\n  AND ts > now()-interval '24 hours'\n  AND ticket_id IS NOT NULL", "format": "table", "refId": "A"}]
+    },
+
+    {
+      "id": 6,
+      "title": "Recent Errors",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 11},
+      "panels": []
+    },
+
+    {
+      "id": 7,
+      "title": "Recent errors & criticals — last 24 h",
+      "description": "Error and critical log entries. Attempts shows how many times the related ticket has been retried.",
+      "type": "table",
+      "gridPos": {"h": 7, "w": 24, "x": 0, "y": 12},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {"sortBy": [{"displayName": "Time", "desc": true}], "footer": {"show": false}},
+      "fieldConfig": {
+        "defaults": {"custom": {"inspect": true}},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Level"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "custom.width", "value": 80},
+              {"id": "mappings", "value": [{"type": "value", "options": {
+                "error":    {"color": "orange", "index": 0, "text": "error"},
+                "critical": {"color": "red",    "index": 1, "text": "critical"}
+              }}]}
+            ]
+          },
+          {"matcher": {"id": "byName", "options": "Message"},   "properties": [{"id": "custom.width", "value": 460}, {"id": "custom.wrap", "value": true}]},
+          {"matcher": {"id": "byName", "options": "Time"},      "properties": [{"id": "custom.width", "value": 110}]},
+          {"matcher": {"id": "byName", "options": "Workspace"}, "properties": [{"id": "custom.width", "value": 110}]},
+          {"matcher": {"id": "byName", "options": "Component"}, "properties": [{"id": "custom.width", "value": 110}]},
+          {"matcher": {"id": "byName", "options": "Ticket"},    "properties": [{"id": "custom.width", "value": 65}]},
+          {
+            "matcher": {"id": "byName", "options": "Attempts"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "custom.width", "value": 80},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 2}, {"color": "red", "value": 3}]}},
+              {"id": "color", "value": {"mode": "thresholds"}}
+            ]
+          }
+        ]
+      },
+      "targets": [{
+        "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+        "rawSql": "SELECT\n  to_char(l.created_at AT TIME ZONE 'UTC', 'MM-DD HH24:MI') AS \"Time\",\n  COALESCE(l.workspace_id, 'system')                      AS \"Workspace\",\n  l.level                                                 AS \"Level\",\n  l.component                                             AS \"Component\",\n  l.ticket_id                                             AS \"Ticket\",\n  t.attempts                                              AS \"Attempts\",\n  LEFT(l.message, 180)                                    AS \"Message\"\nFROM logs l\nLEFT JOIN tickets t ON t.id = l.ticket_id\nWHERE l.level IN ('error', 'critical')\n  AND l.created_at > now() - interval '24 hours'\nORDER BY l.created_at DESC\nLIMIT 30",
+        "format": "table",
+        "refId": "A"
+      }]
+    },
+
+    {
+      "id": 8,
+      "title": "MCP Health",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 19},
+      "panels": []
+    },
+
+    {
+      "id": 9,
+      "title": "memory — ws-alpha",
+      "type": "stat",
+      "gridPos": {"h": 3, "w": 8, "x": 0, "y": 20},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "justifyMode": "center", "textMode": "value"},
+      "fieldConfig": {"defaults": {
+        "thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": null}, {"color": "red", "value": 0}, {"color": "green", "value": 1}]},
+        "color": {"mode": "thresholds"},
+        "mappings": [{"type": "value", "options": {"-1": {"text": "UNKNOWN", "index": 0}, "0": {"text": "DOWN", "index": 1}, "1": {"text": "UP", "index": 2}}}]
+      }},
+      "targets": [{"datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"}, "rawSql": "SELECT CASE WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='error' AND metadata->>'endpoint'='memory-mcp-ws-alpha' AND created_at>now()-interval '6 minutes') THEN 0 WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='info' AND created_at>now()-interval '6 minutes') THEN 1 ELSE -1 END AS health", "format": "table", "refId": "A"}]
+    },
+
+    {
+      "id": 10,
+      "title": "memory — ws-beta",
+      "type": "stat",
+      "gridPos": {"h": 3, "w": 8, "x": 8, "y": 20},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "justifyMode": "center", "textMode": "value"},
+      "fieldConfig": {"defaults": {
+        "thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": null}, {"color": "red", "value": 0}, {"color": "green", "value": 1}]},
+        "color": {"mode": "thresholds"},
+        "mappings": [{"type": "value", "options": {"-1": {"text": "UNKNOWN", "index": 0}, "0": {"text": "DOWN", "index": 1}, "1": {"text": "UP", "index": 2}}}]
+      }},
+      "targets": [{"datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"}, "rawSql": "SELECT CASE WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='error' AND metadata->>'endpoint'='memory-mcp-ws-beta' AND created_at>now()-interval '6 minutes') THEN 0 WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='info' AND created_at>now()-interval '6 minutes') THEN 1 ELSE -1 END AS health", "format": "table", "refId": "A"}]
+    },
+
+    {
+      "id": 11,
+      "title": "memory — ws-gamma",
+      "type": "stat",
+      "gridPos": {"h": 3, "w": 8, "x": 16, "y": 20},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "justifyMode": "center", "textMode": "value"},
+      "fieldConfig": {"defaults": {
+        "thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": null}, {"color": "red", "value": 0}, {"color": "green", "value": 1}]},
+        "color": {"mode": "thresholds"},
+        "mappings": [{"type": "value", "options": {"-1": {"text": "UNKNOWN", "index": 0}, "0": {"text": "DOWN", "index": 1}, "1": {"text": "UP", "index": 2}}}]
+      }},
+      "targets": [{"datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"}, "rawSql": "SELECT CASE WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='error' AND metadata->>'endpoint'='memory-mcp-ws-gamma' AND created_at>now()-interval '6 minutes') THEN 0 WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='info' AND created_at>now()-interval '6 minutes') THEN 1 ELSE -1 END AS health", "format": "table", "refId": "A"}]
+    },
+
+    {
+      "id": 12,
+      "title": "github — ws-alpha",
+      "type": "stat",
+      "gridPos": {"h": 3, "w": 8, "x": 0, "y": 23},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "justifyMode": "center", "textMode": "value"},
+      "fieldConfig": {"defaults": {
+        "thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": null}, {"color": "red", "value": 0}, {"color": "green", "value": 1}]},
+        "color": {"mode": "thresholds"},
+        "mappings": [{"type": "value", "options": {"-1": {"text": "UNKNOWN", "index": 0}, "0": {"text": "DOWN", "index": 1}, "1": {"text": "UP", "index": 2}}}]
+      }},
+      "targets": [{"datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"}, "rawSql": "SELECT CASE WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='error' AND metadata->>'endpoint'='gh-mcp-ws-alpha' AND created_at>now()-interval '6 minutes') THEN 0 WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='info' AND created_at>now()-interval '6 minutes') THEN 1 ELSE -1 END AS health", "format": "table", "refId": "A"}]
+    },
+
+    {
+      "id": 13,
+      "title": "github — ws-beta",
+      "type": "stat",
+      "gridPos": {"h": 3, "w": 8, "x": 8, "y": 23},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "justifyMode": "center", "textMode": "value"},
+      "fieldConfig": {"defaults": {
+        "thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": null}, {"color": "red", "value": 0}, {"color": "green", "value": 1}]},
+        "color": {"mode": "thresholds"},
+        "mappings": [{"type": "value", "options": {"-1": {"text": "UNKNOWN", "index": 0}, "0": {"text": "DOWN", "index": 1}, "1": {"text": "UP", "index": 2}}}]
+      }},
+      "targets": [{"datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"}, "rawSql": "SELECT CASE WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='error' AND metadata->>'endpoint'='gh-mcp-ws-beta' AND created_at>now()-interval '6 minutes') THEN 0 WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='info' AND created_at>now()-interval '6 minutes') THEN 1 ELSE -1 END AS health", "format": "table", "refId": "A"}]
+    },
+
+    {
+      "id": 14,
+      "title": "github — ws-gamma",
+      "type": "stat",
+      "gridPos": {"h": 3, "w": 8, "x": 16, "y": 23},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "justifyMode": "center", "textMode": "value"},
+      "fieldConfig": {"defaults": {
+        "thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": null}, {"color": "red", "value": 0}, {"color": "green", "value": 1}]},
+        "color": {"mode": "thresholds"},
+        "mappings": [{"type": "value", "options": {"-1": {"text": "UNKNOWN", "index": 0}, "0": {"text": "DOWN", "index": 1}, "1": {"text": "UP", "index": 2}}}]
+      }},
+      "targets": [{"datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"}, "rawSql": "SELECT CASE WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='error' AND metadata->>'endpoint'='gh-mcp-ws-gamma' AND created_at>now()-interval '6 minutes') THEN 0 WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='info' AND created_at>now()-interval '6 minutes') THEN 1 ELSE -1 END AS health", "format": "table", "refId": "A"}]
+    },
+
+    {
+      "id": 15,
+      "title": "obsidian — ws-alpha",
+      "type": "stat",
+      "gridPos": {"h": 3, "w": 8, "x": 0, "y": 26},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "justifyMode": "center", "textMode": "value"},
+      "fieldConfig": {"defaults": {
+        "thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": null}, {"color": "red", "value": 0}, {"color": "green", "value": 1}]},
+        "color": {"mode": "thresholds"},
+        "mappings": [{"type": "value", "options": {"-1": {"text": "UNKNOWN", "index": 0}, "0": {"text": "DOWN", "index": 1}, "1": {"text": "UP", "index": 2}}}]
+      }},
+      "targets": [{"datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"}, "rawSql": "SELECT CASE WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='error' AND metadata->>'endpoint'='obsidian-mcp-ws-alpha' AND created_at>now()-interval '6 minutes') THEN 0 WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='info' AND created_at>now()-interval '6 minutes') THEN 1 ELSE -1 END AS health", "format": "table", "refId": "A"}]
+    },
+
+    {
+      "id": 16,
+      "title": "obsidian — ws-beta",
+      "type": "stat",
+      "gridPos": {"h": 3, "w": 8, "x": 8, "y": 26},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "justifyMode": "center", "textMode": "value"},
+      "fieldConfig": {"defaults": {
+        "thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": null}, {"color": "red", "value": 0}, {"color": "green", "value": 1}]},
+        "color": {"mode": "thresholds"},
+        "mappings": [{"type": "value", "options": {"-1": {"text": "UNKNOWN", "index": 0}, "0": {"text": "DOWN", "index": 1}, "1": {"text": "UP", "index": 2}}}]
+      }},
+      "targets": [{"datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"}, "rawSql": "SELECT CASE WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='error' AND metadata->>'endpoint'='obsidian-mcp-ws-beta' AND created_at>now()-interval '6 minutes') THEN 0 WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='info' AND created_at>now()-interval '6 minutes') THEN 1 ELSE -1 END AS health", "format": "table", "refId": "A"}]
+    },
+
+    {
+      "id": 17,
+      "title": "obsidian — ws-gamma",
+      "type": "stat",
+      "gridPos": {"h": 3, "w": 8, "x": 16, "y": 26},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "graphMode": "none", "justifyMode": "center", "textMode": "value"},
+      "fieldConfig": {"defaults": {
+        "thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": null}, {"color": "red", "value": 0}, {"color": "green", "value": 1}]},
+        "color": {"mode": "thresholds"},
+        "mappings": [{"type": "value", "options": {"-1": {"text": "UNKNOWN", "index": 0}, "0": {"text": "DOWN", "index": 1}, "1": {"text": "UP", "index": 2}}}]
+      }},
+      "targets": [{"datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"}, "rawSql": "SELECT CASE WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='error' AND metadata->>'endpoint'='obsidian-mcp-ws-gamma' AND created_at>now()-interval '6 minutes') THEN 0 WHEN EXISTS (SELECT 1 FROM logs WHERE component='mcp_health' AND level='info' AND created_at>now()-interval '6 minutes') THEN 1 ELSE -1 END AS health", "format": "table", "refId": "A"}]
+    },
+
+    {
+      "id": 18,
+      "title": "All Tickets",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 29},
+      "panels": []
+    },
+
+    {
+      "id": 19,
+      "title": "Ticket detail",
+      "description": "Filter by Workspace and Status dropdowns. Defaults to open / running / escalation_pending / review / done. Dep IDs = upstream dependency ticket numbers. Escalated = coder routed to Sonnet or Opus at least once.",
+      "type": "table",
+      "gridPos": {"h": 14, "w": 24, "x": 0, "y": 30},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {
+        "sortBy": [{"displayName": "ID", "desc": true}],
+        "footer": {"show": false},
+        "frameIndex": 0
+      },
+      "fieldConfig": {
+        "defaults": {"custom": {"inspect": true}},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "ID"},        "properties": [{"id": "custom.width", "value": 55}]},
+          {"matcher": {"id": "byName", "options": "Workspace"}, "properties": [{"id": "custom.width", "value": 110}]},
+          {"matcher": {"id": "byName", "options": "Title"},     "properties": [{"id": "custom.width", "value": 270}]},
+          {
+            "matcher": {"id": "byName", "options": "Status"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "custom.width", "value": 120},
+              {"id": "mappings", "value": [{"type": "value", "options": {
+                "open":               {"color": "blue",        "index": 0, "text": "open"},
+                "running":            {"color": "yellow",      "index": 1, "text": "running"},
+                "blocked":            {"color": "orange",      "index": 2, "text": "blocked"},
+                "escalation_pending": {"color": "dark-orange", "index": 3, "text": "esc. pending"},
+                "review":             {"color": "purple",      "index": 4, "text": "review"},
+                "done":               {"color": "green",       "index": 5, "text": "done"},
+                "failed":             {"color": "red",         "index": 6, "text": "failed"},
+                "cancelled":          {"color": "text",        "index": 7, "text": "cancelled"}
+              }}]}
+            ]
+          },
+          {"matcher": {"id": "byName", "options": "Priority"}, "properties": [{"id": "custom.width", "value": 72}]},
+          {
+            "matcher": {"id": "byName", "options": "Attempts"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "custom.width", "value": 80},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 2}, {"color": "red", "value": 3}]}},
+              {"id": "color", "value": {"mode": "thresholds"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Escalated"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "custom.width", "value": 85},
+              {"id": "mappings", "value": [{"type": "value", "options": {
+                "YES": {"color": "orange", "index": 0, "text": "YES"},
+                "—":   {"color": "green",  "index": 1, "text": "—"}
+              }}]}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Cost $"},
+            "properties": [
+              {"id": "custom.width", "value": 85},
+              {"id": "unit",     "value": "currencyUSD"},
+              {"id": "decimals", "value": 4}
+            ]
+          },
+          {"matcher": {"id": "byName", "options": "Dep IDs"},     "properties": [{"id": "custom.width", "value": 85}]},
+          {"matcher": {"id": "byName", "options": "Last Error"},   "properties": [{"id": "custom.width", "value": 250}, {"id": "custom.wrap", "value": true}]},
+          {
+            "matcher": {"id": "byName", "options": "PR"},
+            "properties": [
+              {"id": "links", "value": [{"title": "Open PR", "url": "${__value.raw}", "targetBlank": true}]},
+              {"id": "custom.width", "value": 260}
+            ]
+          },
+          {"matcher": {"id": "byName", "options": "Created"},       "properties": [{"id": "custom.width", "value": 105}]},
+          {"matcher": {"id": "byName", "options": "Elapsed (min)"}, "properties": [{"id": "custom.width", "value": 105}, {"id": "decimals", "value": 1}]}
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+          "rawSql": "SELECT\n  t.id                                                                        AS \"ID\",\n  t.workspace_id                                                              AS \"Workspace\",\n  LEFT(t.title, 70)                                                           AS \"Title\",\n  t.status                                                                    AS \"Status\",\n  t.priority                                                                  AS \"Priority\",\n  t.attempts                                                                  AS \"Attempts\",\n  CASE WHEN COALESCE(cc.escalated, false) THEN 'YES' ELSE '—' END            AS \"Escalated\",\n  ROUND(COALESCE(cc.total_cost, 0)::numeric, 4)                              AS \"Cost $\",\n  COALESCE(ARRAY_TO_STRING(t.dependencies, ', '), '—')                        AS \"Dep IDs\",\n  LEFT(COALESCE(t.last_error, ''), 130)                                       AS \"Last Error\",\n  t.pr_url                                                                    AS \"PR\",\n  to_char(t.created_at AT TIME ZONE 'UTC', 'MM-DD HH24:MI')                  AS \"Created\",\n  CASE\n    WHEN t.completed_at IS NOT NULL\n      THEN ROUND(EXTRACT(EPOCH FROM (t.completed_at - t.created_at)) / 60.0, 1)\n    WHEN t.started_at IS NOT NULL\n      THEN ROUND(EXTRACT(EPOCH FROM (now() - t.started_at)) / 60.0, 1)\n    ELSE NULL\n  END                                                                         AS \"Elapsed (min)\"\nFROM tickets t\nLEFT JOIN (\n  SELECT ticket_id,\n    SUM(cost_usd)                                                             AS total_cost,\n    BOOL_OR(router_decision IN ('sonnet-coder','opus-coder'))                 AS escalated\n  FROM coder_calls\n  WHERE ticket_id IS NOT NULL\n  GROUP BY ticket_id\n) cc ON cc.ticket_id = t.id\nWHERE t.workspace_id IN ($workspace)\n  AND t.status IN ($status)\nORDER BY t.id DESC\nLIMIT 500",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    }
+
+  ],
+  "schemaVersion": 38,
+  "version": 3
+}

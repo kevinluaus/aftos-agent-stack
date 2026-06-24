@@ -1,0 +1,294 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_AGENTSTACK",
+      "label": "agentstack",
+      "description": "agentstack PostgreSQL datasource",
+      "type": "datasource",
+      "pluginId": "grafana-postgresql-datasource",
+      "pluginName": "PostgreSQL"
+    }
+  ],
+  "__requires": [
+    {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "9.0.0"},
+    {"type": "datasource", "id": "grafana-postgresql-datasource", "name": "PostgreSQL", "version": "1.0.0"}
+  ],
+  "title": "Ticket Workflow",
+  "uid": "ticket-workflow-7-29",
+  "tags": ["stage7", "tickets", "workflow"],
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": {"from": "now-24h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "title": "Ticket status distribution — 24 h (hourly)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 18, "x": 0, "y": 0},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {
+        "tooltip": {"mode": "multi"},
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+          "rawSql": "SELECT\n  $__timeGroup(created_at, '1h') AS time,\n  status AS metric,\n  COUNT(*) AS value\nFROM tickets\nWHERE $__timeFilter(created_at)\nGROUP BY 1, 2\nORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Open backlog",
+      "type": "stat",
+      "description": "Tickets with status=open and attempts < 3",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 10},
+              {"color": "red", "value": 25}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+          "rawSql": "SELECT COUNT(*) AS \"Open backlog\"\nFROM tickets\nWHERE status = 'open'\n  AND attempts < 3",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Stuck tickets (running > 60 min)",
+      "type": "stat",
+      "description": "Alert if > 0. Means orchestrator may have died mid-task.",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 4},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+          "rawSql": "SELECT COUNT(*) AS \"Stuck (>60min)\"\nFROM tickets\nWHERE status = 'running'\n  AND started_at < now() - interval '60 minutes'",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Avg completion time by workspace — last 7 days (minutes)",
+      "type": "table",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {"sortBy": [{"displayName": "Avg minutes", "desc": false}]},
+      "targets": [
+        {
+          "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+          "rawSql": "SELECT\n  workspace_id AS \"Workspace\",\n  COUNT(*) AS \"Done\",\n  ROUND(AVG(EXTRACT(EPOCH FROM (completed_at - created_at)) / 60)::numeric, 1) AS \"Avg minutes\"\nFROM tickets\nWHERE status = 'done'\n  AND completed_at IS NOT NULL\n  AND created_at > now() - interval '7 days'\nGROUP BY workspace_id\nORDER BY 3",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Failures by workspace — last 7 days",
+      "type": "barchart",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {
+        "orientation": "vertical",
+        "legend": {"displayMode": "list", "placement": "bottom"}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+          "rawSql": "SELECT\n  workspace_id AS \"Workspace\",\n  COUNT(*) AS \"Failures\"\nFROM tickets\nWHERE status = 'failed'\n  AND created_at > now() - interval '7 days'\nGROUP BY 1\nORDER BY 2 DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "PRs waiting for review",
+      "description": "Tickets in 'review' status — PR is open, awaiting /review-pending. Alert 5 fires when queue drains.",
+      "type": "table",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 16},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {
+        "sortBy": [{"displayName": "hours_waiting", "desc": true}],
+        "footer": {"show": false}
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "pr_url"},
+            "properties": [
+              {"id": "links", "value": [{"title": "Open PR", "url": "${__value.raw}", "targetBlank": true}]},
+              {"id": "custom.width", "value": 400}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "hours_waiting"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 4},
+                {"color": "red", "value": 24}
+              ]}}
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+          "rawSql": "SELECT\n  workspace_id,\n  id AS ticket_id,\n  LEFT(title, 60) AS title,\n  pr_url,\n  to_char(updated_at AT TIME ZONE 'UTC', 'MM-DD HH24:MI') AS opened_utc,\n  ROUND(EXTRACT(EPOCH FROM (now() - updated_at)) / 3600.0, 1) AS hours_waiting\nFROM tickets\nWHERE status = 'review'\nORDER BY updated_at ASC",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Coder build outcomes — last 7 days",
+      "description": "Success/fail counts and cost per model tier per workspace. Source: coder_calls table.",
+      "type": "table",
+      "gridPos": {"h": 8, "w": 14, "x": 0, "y": 22},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {
+        "sortBy": [{"displayName": "workspace_id", "desc": false}],
+        "footer": {"show": false}
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "failed"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 3}
+              ]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "cost_usd"},
+            "properties": [{"id": "unit", "value": "currencyUSD"}, {"id": "decimals", "value": 4}]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+          "rawSql": "SELECT\n  workspace_id,\n  router_decision AS model_tier,\n  COUNT(*) AS total,\n  SUM(CASE WHEN success THEN 1 ELSE 0 END) AS succeeded,\n  SUM(CASE WHEN NOT success THEN 1 ELSE 0 END) AS failed,\n  ROUND(SUM(cost_usd)::numeric, 4) AS cost_usd,\n  ROUND(AVG(latency_ms)::numeric, 0) AS avg_latency_ms\nFROM coder_calls\nWHERE ts >= now() - INTERVAL '7 days'\nGROUP BY workspace_id, router_decision\nORDER BY workspace_id, router_decision",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Live build heartbeat",
+      "description": "Running tickets and time since last heartbeat. Heartbeat fires every 60s — >120s stale means build may be dead (reaper fires at 6 min).",
+      "type": "table",
+      "gridPos": {"h": 8, "w": 10, "x": 14, "y": 22},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {
+        "sortBy": [{"displayName": "secs_since_hb", "desc": true}],
+        "footer": {"show": false}
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "secs_since_hb"},
+            "properties": [
+              {"id": "displayName", "value": "secs since HB"},
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 120},
+                {"color": "red", "value": 360}
+              ]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "running_mins"},
+            "properties": [{"id": "displayName", "value": "running (min)"}]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+          "rawSql": "SELECT\n  workspace_id,\n  id AS ticket_id,\n  LEFT(title, 40) AS title,\n  ROUND(EXTRACT(EPOCH FROM (now() - started_at)) / 60.0, 1) AS running_mins,\n  ROUND(EXTRACT(EPOCH FROM (now() - updated_at))::numeric) AS secs_since_hb\nFROM tickets\nWHERE status = 'running'\nORDER BY secs_since_hb DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Reaper activity — last 24 h",
+      "description": "Requeue and failure-digest events from the n8n reaper workflows. Empty = no stale builds or failures today.",
+      "type": "table",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 30},
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+      "options": {
+        "sortBy": [{"displayName": "time", "desc": true}],
+        "footer": {"show": false}
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "message"},
+            "properties": [{"id": "custom.width", "value": 500}]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {"type": "grafana-postgresql-datasource", "uid": "${DS_AGENTSTACK}"},
+          "rawSql": "SELECT\n  to_char(created_at AT TIME ZONE 'UTC', 'MM-DD HH24:MI') AS time,\n  COALESCE(workspace_id, 'all') AS workspace,\n  ticket_id,\n  message\nFROM logs\nWHERE component = 'reaper'\n  AND created_at > now() - INTERVAL '24 hours'\nORDER BY created_at DESC\nLIMIT 50",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 38,
+  "version": 2
+}

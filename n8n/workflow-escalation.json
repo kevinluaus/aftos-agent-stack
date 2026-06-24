@@ -1,0 +1,152 @@
+{
+  "name": "Escalation Gate — Sonnet approval required",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "escl-0001-0001-0001-0001-000000000001",
+      "name": "Schedule (every 5 min)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH auto_approve AS (UPDATE tickets SET status='open', updated_at=now() WHERE status='escalation_pending' AND updated_at < now() - interval '24 hours' AND COALESCE((SELECT AVG(prompt_tokens) * 3.0 / 1000000 + AVG(completion_tokens) * 15.0 / 1000000 + AVG(prompt_tokens) * 15.0 / 1000000 + AVG(completion_tokens) * 75.0 / 1000000 FROM coder_calls WHERE ticket_id = tickets.id), 5.0) < 5.0 RETURNING id, workspace_id) INSERT INTO logs (workspace_id, component, level, message, ticket_id) SELECT workspace_id, 'escalation_approved', 'info', 'escalation auto-approved (24h elapsed, cost < $5)', id FROM auto_approve",
+        "options": {}
+      },
+      "id": "escl-0002-0002-0002-0002-000000000002",
+      "name": "Auto-Approve Reaper",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [220, 300],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT t.id, t.title, t.workspace_id, COALESCE(t.last_error, 'none') AS last_error, t.attempts, t.status, CASE WHEN t.status = 'escalation_pending' THEN 'reminder' ELSE 'new' END AS alert_type, ROUND(COALESCE((SELECT AVG(prompt_tokens) * 3.0 / 1000000 + AVG(completion_tokens) * 15.0 / 1000000 FROM coder_calls WHERE ticket_id = t.id), 0.20)::numeric, 4) AS est_sonnet_usd, ROUND(COALESCE((SELECT AVG(prompt_tokens) * 15.0 / 1000000 + AVG(completion_tokens) * 75.0 / 1000000 FROM coder_calls WHERE ticket_id = t.id), 1.00)::numeric, 4) AS est_opus_usd FROM tickets t WHERE (t.status = 'open' AND t.attempts = 3 AND NOT EXISTS (SELECT 1 FROM logs WHERE component = 'escalation_pending' AND ticket_id = t.id)) OR (t.status = 'escalation_pending' AND NOT EXISTS (SELECT 1 FROM logs WHERE component IN ('escalation_pending', 'escalation_reminder') AND ticket_id = t.id AND created_at > now() - interval '4 hours')) ORDER BY t.id",
+        "options": {}
+      },
+      "id": "escl-0003-0003-0003-0003-000000000003",
+      "name": "Escalation Probe",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [440, 300],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH hold AS (UPDATE tickets SET status='escalation_pending', updated_at=now() WHERE id={{ $json.id }} AND status='open'), log_insert AS (INSERT INTO logs (workspace_id, component, level, message, ticket_id) SELECT '{{ $json.workspace_id }}', CASE WHEN status='escalation_pending' THEN 'escalation_reminder' ELSE 'escalation_pending' END, 'warn', 'escalation gate: ticket #{{ $json.id }}', {{ $json.id }} FROM tickets WHERE id={{ $json.id }}) SELECT {{ $json.id }} AS ticket_id",
+        "options": {}
+      },
+      "id": "escl-0004-0004-0004-0004-000000000004",
+      "name": "Hold and Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [660, 300],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "agentstack-db"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "={{ $('Escalation Probe').item.json.alert_type === 'reminder' ? '⏰ REMINDER: ' : '🔔 ' }}Escalation approval required\n\nTicket #{{ $('Escalation Probe').item.json.id }} — {{ $('Escalation Probe').item.json.workspace_id }}\n{{ $('Escalation Probe').item.json.title }}\n\nQwen attempts: 3 exhausted. About to escalate to Sonnet.\nLast error: {{ $('Escalation Probe').item.json.last_error }}\n\nEstimated cost:\n  Sonnet (attempt 4): ${{ $('Escalation Probe').item.json.est_sonnet_usd }}\n  Opus (attempt 5):   ${{ $('Escalation Probe').item.json.est_opus_usd }}\n  Total worst-case:   ${{ (Number($('Escalation Probe').item.json.est_sonnet_usd) + Number($('Escalation Probe').item.json.est_opus_usd)).toFixed(4) }}\n  {{ (Number($('Escalation Probe').item.json.est_sonnet_usd) + Number($('Escalation Probe').item.json.est_opus_usd)) < 5 ? '✅ AUTO-APPROVES in 24h (under $5)' : '⛔ MANUAL APPROVAL REQUIRED (over $5 — no auto-approve)' }}\n\nReply:\n  /approve {{ $('Escalation Probe').item.json.id }}   — release to Sonnet now\n  /disapprove {{ $('Escalation Probe').item.json.id }} — mark failed, re-scope ticket\n  /requeue {{ $('Escalation Probe').item.json.id }}   — reset to Qwen (attempts=0, clear error)",
+        "additionalFields": {}
+      },
+      "id": "escl-0005-0005-0005-0005-000000000005",
+      "name": "Ops Alert (escalation)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [880, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "aftos-ops-bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule (every 5 min)": {
+      "main": [
+        [
+          {
+            "node": "Auto-Approve Reaper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto-Approve Reaper": {
+      "main": [
+        [
+          {
+            "node": "Escalation Probe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalation Probe": {
+      "main": [
+        [
+          {
+            "node": "Hold and Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hold and Log": {
+      "main": [
+        [
+          {
+            "node": "Ops Alert (escalation)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "errorWorkflow": "agentstack-error-handler-v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": {
+    "instanceId": ""
+  },
+  "id": "agentstack-escalation-v1",
+  "active": false
+}

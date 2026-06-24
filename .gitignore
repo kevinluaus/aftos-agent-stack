@@ -1,0 +1,11 @@
+*.env
+*.local
+*.env.*
+secrets/
+backups/
+__pycache__/
+*.pyc
+.venv/
+*.log
+*.bak
+.DS_Store

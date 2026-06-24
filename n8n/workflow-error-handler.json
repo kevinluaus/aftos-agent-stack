@@ -1,0 +1,54 @@
+{
+  "name": "Error Handler — Ops Alert",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "errh-0001-0001-0001-0001-000000000001",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "🔴 n8n workflow error\n\nWorkflow: {{ $json.workflow.name }}\nNode: {{ $json.execution.lastNodeExecuted }}\nError: {{ $json.execution.error.message }}\n\nExecution ID: {{ $json.execution.id }}",
+        "additionalFields": {}
+      },
+      "id": "errh-0002-0002-0002-0002-000000000002",
+      "name": "Ops Alert (workflow error)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [220, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "aftos-ops-bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Ops Alert (workflow error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": {
+    "instanceId": ""
+  },
+  "id": "agentstack-error-handler-v1",
+  "active": true
+}
